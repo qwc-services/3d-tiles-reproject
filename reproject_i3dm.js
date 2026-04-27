@@ -1,3 +1,11 @@
+/**
+ * Copyright 2026 Sourcepole AG
+ * All rights reserved.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
 import fs from "fs";
 import proj4 from "proj4";
 
@@ -61,7 +69,10 @@ export default class ReprojectI3DM {
 
     reprojectPositions(positions, targetCRS) {
 
-        const transformed = positions.map(p => proj4("EPSG:4978", targetCRS, p));
+        const transformed = positions.map(pECEF => {
+            const [lon, lat, h] = proj4("EPSG:4978", 'EPSG:4326', pECEF);
+            return proj4('EPSG:4326', targetCRS, [lon, lat, h]);
+        });
 
         const center = [0,0,0];
 
@@ -99,7 +110,7 @@ export default class ReprojectI3DM {
 
         const file = fs.readFileSync(inPath);
 
-        // --- HEADER ---
+        // Read input
         const header = {
             magic: file.toString("utf8", 0, 4),
             version: file.readUInt32LE(4),
@@ -131,10 +142,11 @@ export default class ReprojectI3DM {
 
         const gltf = file.slice(offset);
 
-        // --- PROCESS ---
+        // Decode and reproject positions
         const world = this.decodePositions(ftJson, ftBin);
         const {deltas, center} = this.reprojectPositions(world, targetCRS);
 
+        // Write new feature table
         const newFtJson = { ...ftJson };
         delete newFtJson.POSITION_QUANTIZED;
         newFtJson.POSITION = { byteOffset: 0 };
@@ -197,8 +209,21 @@ export default class ReprojectI3DM {
         let newFtJsonBuf = Buffer.from(JSON.stringify(newFtJson));
         newFtJsonBuf = this.pad8(newFtJsonBuf, ' ');
 
-        // console.log(JSON.stringify(newFtJson))
+        // Recompute bounds based on data
+        let minx = +Infinity, maxx = -Infinity;
+        let miny = +Infinity, maxy = -Infinity;
+        let minz = +Infinity, maxz = -Infinity;
+        deltas.forEach(delta => {
+            const p = [center[0] + delta[0], center[1] + delta[1], center[2] + delta[2]];
+            minx = Math.min(minx, p[0]);
+            maxx = Math.max(maxx, p[0]);
+            miny = Math.min(miny, p[1]);
+            maxy = Math.max(maxy, p[1]);
+            minz = Math.min(minz, p[2]);
+            maxz = Math.max(maxz, p[2]);
+        });
 
+        // Write output
         const totalLen =
             32 +
             newFtJsonBuf.length +
@@ -229,12 +254,13 @@ export default class ReprojectI3DM {
 
         fs.writeFileSync(outPath, out);
 
+        console.log(`byteLength: ${header.byteLength} => ${totalLen}`);
+        console.log(`ftJsonLen: ${header.ftJsonLen} => ${newFtJsonBuf.length}`);
+        console.log(`ftBinLen: ${header.ftBinLen} => ${newFtBin.length}`);
+        console.log(`btJsonLen: ${header.btJsonLen} => ${btJson.length}`);
+        console.log(`btBinLen: ${header.btBinLen} => ${btBin.length}`);
+        console.log(`bounds: ${JSON.stringify({minx, miny, minz, maxx, maxy, maxz})}`)
         console.log(`✔ ${inPath}`);
-        // console.log(`byteLength: ${header.byteLength} => ${totalLen}`);
-        // console.log(`ftJsonLen: ${header.ftJsonLen} => ${newFtJsonBuf.length}`);
-        // console.log(`ftBinLen: ${header.ftBinLen} => ${newFtBin.length}`);
-        // console.log(`btJsonLen: ${header.btJsonLen} => ${btJson.length}`);
-        // console.log(`btBinLen: ${header.btBinLen} => ${btBin.length}`);
-
+        return {minx, miny, minz, maxx, maxy, maxz};
     }
 }

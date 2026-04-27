@@ -1,3 +1,11 @@
+/**
+ * Copyright 2026 Sourcepole AG
+ * All rights reserved.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
 import draco3d from 'draco3dgltf';
 import fs from "fs";
 import proj4 from "proj4";
@@ -11,7 +19,7 @@ export default class ReprojectB3DM {
     async process(inPath, outPath, targetCRS, transform) {
         const file = fs.readFileSync(inPath);
 
-        // --- HEADER ---
+        // Read input
         const header = {
             magic: file.toString("utf8", 0, 4),
             version: file.readUInt32LE(4),
@@ -42,6 +50,7 @@ export default class ReprojectB3DM {
 
         const glb = file.slice(offset);
 
+        // Reproject GLB blob
         const io = new NodeIO()
         .registerExtensions(ALL_EXTENSIONS)
         .registerDependencies({
@@ -52,14 +61,29 @@ export default class ReprojectB3DM {
         let miny = +Infinity, maxy = -Infinity;
         let minz = +Infinity, maxz = -Infinity;
 
+        const irot90 = new Matrix4().fromArray([
+            1, 0, 0, 0,
+            0, 0, 1, 0,
+            0, -1, 0, 0,
+            0, 0, 0, 1
+        ]);
+
         const doc = await io.readBinary(glb);
         for (const node of doc.getRoot().listNodes()) {
             const mesh = node.getMesh();
             if (!mesh) continue;
 
             const nodeWorld = new Matrix4().fromArray(node.getWorldMatrix());
-            const fullMatrix = transform;//.clone().multiply(nodeWorld);
+            const fullMatrix = new Matrix4()
+                .copy(transform)
+                .multiply(irot90)
+                .multiply(nodeWorld);
             const normalMatrix = new Matrix3().getNormalMatrix(fullMatrix);
+
+            let cx = 0;
+            let cy = 0;
+            let cz = 0;
+            let n = 0;
 
             for (const prim of mesh.listPrimitives()) {
                 const posAccessor = prim.getAttribute('POSITION');
@@ -69,12 +93,14 @@ export default class ReprojectB3DM {
                 for (let i = 0; i < posArray.length; i += 3) {
                     const pECEF = new Vector3(...posArray.slice(i, i + 3)).applyMatrix4(fullMatrix);
                     const [lon, lat, h] = proj4("EPSG:4978", 'EPSG:4326', pECEF.toArray());
-                    const pProj = proj4('EPSG:4326', 'EPSG:25832', [lon, lat, h]);
+                    const pProj = proj4('EPSG:4326', targetCRS, [lon, lat, h]);
                     posArray[i] = pProj[0];
                     posArray[i+1] = pProj[1];
                     posArray[i+2] = pProj[2];
-                    // posArray[i+1] = pProj[2];
-                    // posArray[i+2] = -pProj[1];
+                    cx += posArray[i];
+                    cy += posArray[i+1];
+                    cz += posArray[i+2];
+                    n += 1;
                     minx = Math.min(minx, posArray[i]);
                     maxx = Math.max(maxx, posArray[i]);
                     miny = Math.min(miny, posArray[i+1]);
@@ -90,35 +116,35 @@ export default class ReprojectB3DM {
                         norArray[i] = n.x;
                         norArray[i+1] = n.y;
                         norArray[i+2] = n.z;
-                        // norArray[i+1] = n.z;
-                        // norArray[i+2] = -n.y;
                     }
                 }
             }
+            cx /= n;
+            cy /= n;
+            cz /= n;
+            for (const prim of mesh.listPrimitives()) {
+                const posAccessor = prim.getAttribute('POSITION');
 
-            // Set transform to identity
+                const posArray = posAccessor.getArray();
+                for (let i = 0; i < posArray.length; i += 3) {
+                    posArray[i] -= cx;
+                    posArray[i+1] -= cy;
+                    posArray[i+2] -= cz;
+                }
+            }
+
             node.setMatrix([
                 1, 0, 0, 0,
                 0, 0,-1, 0,
                 0, 1, 0, 0,
-                0, 0, 0, 1
+                cx, cz, -cy, 1
             ]);
-            /*node.setMatrix([
-                1, 0, 0, 0,
-                0, 1, 0, 0,
-                0, 0, 1, 0,
-                0, 0, 0, 1
-            ]);*/
-            // node.setTranslation([0, 0, 0]);
-            // node.setRotation([0, 0, 0, 1]);
-            // node.setScale([1, 1, 1]);
         }
-        console.log({minz, maxz})
 
         const newGlb = await io.writeBinary(doc);
         await io.write('model.glb', doc);
 
-
+        // Write output
         const totalLen =
             28 +
             ftJsonBin.length +
@@ -148,13 +174,13 @@ export default class ReprojectB3DM {
 
         fs.writeFileSync(outPath, out);
 
-        console.log(`✔ ${inPath}`);
         console.log(`byteLength: ${header.byteLength} => ${totalLen}`);
         console.log(`ftJsonLen: ${header.ftJsonLen} => ${ftJsonBin.length}`);
         console.log(`ftBinLen: ${header.ftBinLen} => ${ftBin.length}`);
         console.log(`btJsonLen: ${header.btJsonLen} => ${btJson.length}`);
         console.log(`btBinLen: ${header.btBinLen} => ${btBin.length}`);
-        console.log({minx, miny, minz, maxx, maxy, maxz})
+        console.log(`bounds: ${JSON.stringify({minx, miny, minz, maxx, maxy, maxz})}`)
+        console.log(`✔ ${inPath}`);
         return {minx, miny, minz, maxx, maxy, maxz};
     }
 }

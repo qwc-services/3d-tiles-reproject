@@ -1,4 +1,12 @@
 #!/usr/bin/env node
+/**
+ * Copyright 2026 Sourcepole AG
+ * All rights reserved.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
 
 import fs from "fs";
 import path from "path";
@@ -7,15 +15,13 @@ import {Vector3, Vector4, Matrix3, Matrix4} from "three";
 
 import ReprojectI3DM from "./reproject_i3dm.js";
 import ReprojectB3DM from "./reproject_b3dm.js";
-import {ecefToLonLatHeight} from './utils.js';
 
-// Ensure projections exist
+// Projection definitions
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
 proj4.defs("EPSG:4978","+proj=geocent +datum=WGS84 +units=m +no_defs");
 proj4.defs("EPSG:4979","+proj=longlat +datum=WGS84 +no_defs");
-proj4.defs("EPSG:25832","+proj=utm +zone=32 +ellps=GRS80 +units=m +no_defs");
 
-let processed = false;
+
 function expandBoxToCorners(box) {
     const cx = box[0], cy = box[1], cz = box[2];
 
@@ -109,9 +115,6 @@ function reprojectBox(box, transform, targetCRS) {
     let xmax = -Infinity, ymax = -Infinity, zmax = -Infinity;
 
     corners.forEach(corner => {
-        // const [lon, lat, h] = proj4("EPSG:4978", "EPSG:4979", corner.toArray());
-        // const [lon, lat, h] = ecefToLonLatHeight(corner.toArray());
-        // const [x, y, z] = proj4("EPSG:4979", targetCRS, [lon, lat, h]);
         const [lon, lat, h] = proj4('EPSG:4978', 'EPSG:4326', corner.toArray());
         const [x, y, z] = proj4('EPSG:4326', 'EPSG:25832', [lon, lat, h]);
 
@@ -131,7 +134,7 @@ function reprojectBox(box, transform, targetCRS) {
     ];
 }
 
-async function reprojectTile(entry, srcDir, dstDir, targetCRS, parentTransform=null) {
+async function reprojectTile(entry, srcDir, dstDir, targetCRS, recomputeBounds, parentTransform=null) {
 
     let transform = parentTransform;
 
@@ -159,14 +162,15 @@ async function reprojectTile(entry, srcDir, dstDir, targetCRS, parentTransform=n
     }
 
     if (entry.content?.uri) {
-        await reprojectTileContent(entry, srcDir, dstDir, targetCRS, transform);
+        await reprojectTileContent(entry, srcDir, dstDir, targetCRS, recomputeBounds, transform);
     }
 
     if (entry.children?.length) {
         let minX = Infinity, minY = Infinity, minZ = Infinity;
         let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
         for (const child of entry.children) {
-            await reprojectTile(child, srcDir, dstDir, targetCRS, transform);
+            await reprojectTile(child, srcDir, dstDir, targetCRS, recomputeBounds, transform);
+
             // Recompute bounding volume
             const corners = expandBoxToCorners(child.boundingVolume.box);
             for (const [x, y, z] of corners) {
@@ -179,23 +183,25 @@ async function reprojectTile(entry, srcDir, dstDir, targetCRS, parentTransform=n
                 if (z > maxZ) maxZ = z;
             }
         }
-        const cx = (minX + maxX) * 0.5;
-        const cy = (minY + maxY) * 0.5;
-        const cz = (minZ + maxZ) * 0.5;
+        if (recomputeBounds) {
+            const cx = (minX + maxX) * 0.5;
+            const cy = (minY + maxY) * 0.5;
+            const cz = (minZ + maxZ) * 0.5;
 
-        const hx = (maxX - minX) * 0.5;
-        const hy = (maxY - minY) * 0.5;
-        const hz = (maxZ - minZ) * 0.5;
-        entry.boundingVolume.box = [
-            cx, cy, cz,
-            hx, 0, 0,
-            0, hy, 0,
-            0, 0, hz
-        ];
+            const hx = (maxX - minX) * 0.5;
+            const hy = (maxY - minY) * 0.5;
+            const hz = (maxZ - minZ) * 0.5;
+            entry.boundingVolume.box = [
+                cx, cy, cz,
+                hx, 0, 0,
+                0, hy, 0,
+                0, 0, hz
+            ];
+        }
     }
 }
 
-async function reprojectTileContent(entry, srcDir, dstDir, targetCrs, transform) {
+async function reprojectTileContent(entry, srcDir, dstDir, targetCrs, recomputeBounds, transform) {
     const uri = entry.content.uri;
     const contentSrcDir = path.join(srcDir, path.dirname(uri));
     const contentDstDir = path.join(dstDir, path.dirname(uri));
@@ -252,37 +258,54 @@ async function reprojectTileContent(entry, srcDir, dstDir, targetCrs, transform)
             return;
         }
 
-        if (!processed) {
-          // processed = true;
         console.log(`Transforming ${src3dm}...`);
         const bounds = await reprojector.process(src3dm, dst3dm, targetCrs, transform, entry.boundingVolume);
 
-        const cx = (bounds.minx + bounds.maxx) * 0.5;
-        const cy = (bounds.miny + bounds.maxy) * 0.5;
-        const cz = (bounds.minz + bounds.maxz) * 0.5;
-        const hx = (bounds.maxx - bounds.minx) * 0.5;
-        const hy = (bounds.maxy - bounds.miny) * 0.5;
-        const hz = (bounds.maxz - bounds.minz) * 0.5;
-        entry.boundingVolume.box = [
-          cx, cy, cz,
-          hx, 0, 0,
-          0, hy, 0,
-          0, 0, hz
-        ];
+        if (recomputeBounds) {
+            const cx = (bounds.minx + bounds.maxx) * 0.5;
+            const cy = (bounds.miny + bounds.maxy) * 0.5;
+            const cz = (bounds.minz + bounds.maxz) * 0.5;
+            const hx = (bounds.maxx - bounds.minx) * 0.5;
+            const hy = (bounds.maxy - bounds.miny) * 0.5;
+            const hz = (bounds.maxz - bounds.minz) * 0.5;
+            entry.boundingVolume.box = [
+            cx, cy, cz,
+            hx, 0, 0,
+            0, hy, 0,
+            0, 0, hz
+            ];
         }
     }
 }
 
 // --- MAIN ---
 if (process.argv.length < 5) {
-    console.error("Usage: node reproject.js src_dir dst_dir target_crs");
+    console.error("Usage: node reproject.js src_dir dst_dir target_crs --recompute-bounds");
     process.exit(1);
 }
 
 const [,, srcDir, dstDir, targetCRS] = process.argv;
 
+const recomputeBounds = process.argv.length > 5 && process.argv[5] === "--recompute-bounds";
+if (recomputeBounds) {
+    console.log("Bounds will be recomputed from transformed coordinates");
+}
+
 const srcTileset = path.join(srcDir, "tileset.json");
 const dstTileset = path.join(dstDir, "tileset.json");
+
+if (fs.existsSync("projections.json")) {
+    const projections = JSON.parse(fs.readFileSync("projections.json"));
+    Object.entries(projections).forEach(([code, def]) => {
+        console.log(`Registering projection ${code}`);
+        proj4.defs(code, def);
+    });
+}
+
+if (!proj4.defs(targetCRS)) {
+    console.error(`Missing CRS definition for ${targetCRS}, please add it to 'projections.json'.`);
+    process.exit(1);
+}
 
 if (!fs.existsSync(srcTileset)) {
     console.error("Missing tileset.json");
@@ -297,7 +320,7 @@ if (fs.existsSync(dstDir)) {
 fs.mkdirSync(dstDir);
 
 const tileset = JSON.parse(fs.readFileSync(srcTileset));
-await reprojectTile(tileset.root || {}, srcDir, dstDir, targetCRS);
+await reprojectTile(tileset.root || {}, srcDir, dstDir, targetCRS, recomputeBounds);
 
 fs.writeFileSync(dstTileset, JSON.stringify(tileset, null, 2));
 
