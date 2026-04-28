@@ -136,7 +136,7 @@ function reprojectBox(box, transform, targetCRS) {
 
 async function reprojectTile(entry, srcDir, dstDir, targetCRS, recomputeBounds, parentTransform=null) {
 
-    let transform = parentTransform;
+    let transform = parentTransform ?? new Matrix4().identity();
 
     if (entry.transform) {
         transform = new Matrix4().fromArray(entry.transform);
