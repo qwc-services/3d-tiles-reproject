@@ -3,9 +3,13 @@
     "version": "0.1.0",
     "description": "3D Tiles reprojection script",
     "author": "Sourcepole",
-    "license": "BSD-2-Clause",
+    "license": "MIT",
+    "repository": "git+git@github.com:qwc-services/3d-tiles-reproject.git",
+    "homepage": "https://github.com/qwc-services/3d-tiles-reproject",
+    "bugs": {
+        "url": "https://github.com/qwc-services/3d-tiles-reproject/issues"
+    },
     "type": "module",
-    "repository": "",
     "dependencies": {
         "@gltf-transform/cli": "^4.3.0",
         "@gltf-transform/core": "^4.3.0",
