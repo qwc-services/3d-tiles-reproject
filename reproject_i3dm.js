@@ -259,8 +259,6 @@ export default class ReprojectI3DM {
         console.log(`ftBinLen: ${header.ftBinLen} => ${newFtBin.length}`);
         console.log(`btJsonLen: ${header.btJsonLen} => ${btJson.length}`);
         console.log(`btBinLen: ${header.btBinLen} => ${btBin.length}`);
-        console.log(`bounds: ${JSON.stringify({minx, miny, minz, maxx, maxy, maxz})}`)
-        console.log(`✔ ${inPath}`);
         return {minx, miny, minz, maxx, maxy, maxz};
     }
 }

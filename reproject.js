@@ -48,6 +48,23 @@ function expandBoxToCorners(box) {
     return corners;
 }
 
+function computeMinMax(points) {
+    let minx = Infinity, miny = Infinity, minz = Infinity;
+    let maxx = -Infinity, maxy = -Infinity, maxz = -Infinity;
+
+    for (const [x, y, z] of points) {
+        if (x < minx) minx = x;
+        if (y < miny) miny = y;
+        if (z < minz) minz = z;
+
+        if (x > maxx) maxx = x;
+        if (y > maxy) maxy = y;
+        if (z > maxz) maxz = z;
+    }
+
+    return {minx, maxx, miny, maxy, minz, maxz};
+}
+
 function reprojectRegionToBox(region, targetCRS) {
     let [west, south, east, north, hmin, hmax] = region;
 
@@ -239,7 +256,7 @@ async function reprojectTileContent(entry, srcDir, dstDir, targetCrs, recomputeB
         console.log(`Transforming ${srcTilesetJson}...`);
         const tileset = JSON.parse(fs.readFileSync(srcTilesetJson, "utf-8"));
 
-        await reprojectTile(tileset.root || {}, contentSrcDir, contentDstDir, targetCrs);
+        await reprojectTile(tileset.root || {}, contentSrcDir, contentDstDir, targetCrs, recomputeBounds, transform);
 
         const dstTilesetJson = path.join(contentDstDir, path.basename(uri));
         fs.writeFileSync(dstTilesetJson, JSON.stringify(tileset, null, 2));
@@ -259,9 +276,14 @@ async function reprojectTileContent(entry, srcDir, dstDir, targetCrs, recomputeB
         }
 
         console.log(`Transforming ${src3dm}...`);
-        const bounds = await reprojector.process(src3dm, dst3dm, targetCrs, transform, entry.boundingVolume);
+        const bounds = await reprojector.process(src3dm, dst3dm, targetCrs, transform);
 
+        const rebounds = computeMinMax(expandBoxToCorners(entry.boundingVolume.box));
+
+        const roundNumbers = (key, value) => typeof value === 'number' ? value.toFixed(4) : value;
+        console.log(`Reprojected bounds: ${JSON.stringify({minx: rebounds.minx, miny: rebounds.miny, minz: rebounds.minz, maxx: rebounds.maxx, maxy: rebounds.maxy, maxz: rebounds.maxz}, roundNumbers)}`)
         if (recomputeBounds) {
+            console.log(`Recomputed bounds:  ${JSON.stringify({minx: bounds.minx, miny: bounds.miny, minz: bounds.minz, maxx: bounds.maxx, maxy: bounds.maxy, maxz: bounds.maxz}, roundNumbers)}`)
             const cx = (bounds.minx + bounds.maxx) * 0.5;
             const cy = (bounds.miny + bounds.maxy) * 0.5;
             const cz = (bounds.minz + bounds.maxz) * 0.5;
@@ -275,6 +297,7 @@ async function reprojectTileContent(entry, srcDir, dstDir, targetCrs, recomputeB
             0, 0, hz
             ];
         }
+        console.log(`✔ ${src3dm}`);
     }
 }
 
