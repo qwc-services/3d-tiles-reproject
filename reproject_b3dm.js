@@ -189,11 +189,11 @@ export default class ReprojectB3DM {
 
         fs.writeFileSync(outPath, out);
 
-        console.log(`byteLength: ${header.byteLength} => ${totalLen}`);
-        console.log(`ftJsonLen: ${header.ftJsonLen} => ${ftJsonBin.length}`);
-        console.log(`ftBinLen: ${header.ftBinLen} => ${ftBin.length}`);
-        console.log(`btJsonLen: ${header.btJsonLen} => ${btJson.length}`);
-        console.log(`btBinLen: ${header.btBinLen} => ${btBin.length}`);
+        console.log(`⏺ byteLength: ${header.byteLength} => ${totalLen}`);
+        // console.log(`⏺ ftJsonLen: ${header.ftJsonLen} => ${ftJsonBin.length}`);
+        // console.log(`⏺ ftBinLen: ${header.ftBinLen} => ${ftBin.length}`);
+        // console.log(`⏺ btJsonLen: ${header.btJsonLen} => ${btJson.length}`);
+        // console.log(`⏺ btBinLen: ${header.btBinLen} => ${btBin.length}`);
         return {minx, miny, minz, maxx, maxy, maxz};
     }
 }
