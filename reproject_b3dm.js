@@ -16,7 +16,7 @@ import {Matrix3, Matrix4, Vector3} from "three";
 
 
 export default class ReprojectB3DM {
-    async process(inPath, outPath, targetCRS, transform) {
+    async process(inPath, outPath, targetCRS, transform, upAxis) {
         const file = fs.readFileSync(inPath);
 
         // Read input
@@ -61,12 +61,12 @@ export default class ReprojectB3DM {
         let miny = +Infinity, maxy = -Infinity;
         let minz = +Infinity, maxz = -Infinity;
 
-        const irot90 = new Matrix4().fromArray([
+        const upAxisRot = upAxis == "Y" ? new Matrix4().fromArray([
             1, 0, 0, 0,
             0, 0, 1, 0,
             0, -1, 0, 0,
             0, 0, 0, 1
-        ]);
+        ]) : new Matrix4().identity();
 
         const doc = await io.readBinary(glb);
         for (const node of doc.getRoot().listNodes()) {
@@ -76,7 +76,7 @@ export default class ReprojectB3DM {
             const nodeWorld = new Matrix4().fromArray(node.getWorldMatrix());
             const fullMatrix = new Matrix4()
                 .copy(transform)
-                .multiply(irot90)
+                .multiply(upAxisRot)
                 .multiply(nodeWorld);
             const normalMatrix = new Matrix3().getNormalMatrix(fullMatrix);
 
@@ -133,12 +133,21 @@ export default class ReprojectB3DM {
                 }
             }
 
-            node.setMatrix([
-                1, 0, 0, 0,
-                0, 0,-1, 0,
-                0, 1, 0, 0,
-                cx, cz, -cy, 1
-            ]);
+            if (upAxis === 'Y') {
+                node.setMatrix([
+                    1, 0, 0, 0,
+                    0, 0,-1, 0,
+                    0, 1, 0, 0,
+                    cx, cz, -cy, 1
+                ]);
+            } else {
+                node.setMatrix([
+                    1, 0, 0, 0,
+                    0, 1, 0, 0,
+                    0, 0, 1, 0,
+                    cx, cy, cz, 1
+                ]);
+            }
         }
 
         const newGlb = await io.writeBinary(doc);
