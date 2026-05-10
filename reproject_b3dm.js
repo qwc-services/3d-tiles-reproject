@@ -149,6 +149,12 @@ export default class ReprojectB3DM {
                 ]);
             }
         }
+        // Fix for mesh materials being fully transparent
+        for (const material of doc.getRoot().listMaterials()) {
+            const color = material.getBaseColorFactor();
+            color[3] = 1.0;
+            material.setBaseColorFactor(color);
+        }
 
         const newGlb = await io.writeBinary(doc);
         await io.write('model.glb', doc);
