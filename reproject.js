@@ -281,9 +281,9 @@ async function reprojectTileContent(entry, srcDir, dstDir, targetCrs, recomputeB
         const rebounds = computeMinMax(expandBoxToCorners(entry.boundingVolume.box));
 
         const roundNumbers = (key, value) => typeof value === 'number' ? value.toFixed(4) : value;
-        console.log(`⏺ Reprojected bounds: ${JSON.stringify({minx: rebounds.minx, miny: rebounds.miny, minz: rebounds.minz, maxx: rebounds.maxx, maxy: rebounds.maxy, maxz: rebounds.maxz}, roundNumbers)}`)
+        console.log(` ∙ Reprojected bounds: ${JSON.stringify({minx: rebounds.minx, miny: rebounds.miny, minz: rebounds.minz, maxx: rebounds.maxx, maxy: rebounds.maxy, maxz: rebounds.maxz}, roundNumbers)}`)
         if (recomputeBounds) {
-            console.log(`⏺ Recomputed bounds:  ${JSON.stringify({minx: bounds.minx, miny: bounds.miny, minz: bounds.minz, maxx: bounds.maxx, maxy: bounds.maxy, maxz: bounds.maxz}, roundNumbers)}`)
+            console.log(` ∙ Recomputed bounds:  ${JSON.stringify({minx: bounds.minx, miny: bounds.miny, minz: bounds.minz, maxx: bounds.maxx, maxy: bounds.maxy, maxz: bounds.maxz}, roundNumbers)}`)
             const cx = (bounds.minx + bounds.maxx) * 0.5;
             const cy = (bounds.miny + bounds.maxy) * 0.5;
             const cz = (bounds.minz + bounds.maxz) * 0.5;
@@ -291,10 +291,10 @@ async function reprojectTileContent(entry, srcDir, dstDir, targetCrs, recomputeB
             const hy = (bounds.maxy - bounds.miny) * 0.5;
             const hz = (bounds.maxz - bounds.minz) * 0.5;
             entry.boundingVolume.box = [
-            cx, cy, cz,
-            hx, 0, 0,
-            0, hy, 0,
-            0, 0, hz
+                cx, cy, cz,
+                hx, 0, 0,
+                0, hy, 0,
+                0, 0, hz
             ];
         }
         console.log(`✔ ${src3dm}`);
