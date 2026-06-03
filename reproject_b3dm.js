@@ -79,11 +79,9 @@ export default class ReprojectB3DM {
                 .multiply(upAxisRot)
                 .multiply(nodeWorld);
             const normalMatrix = new Matrix3().getNormalMatrix(fullMatrix);
-
-            let cx = 0;
-            let cy = 0;
-            let cz = 0;
-            let n = 0;
+            const transformOrigin = fullMatrix.elements.slice(12, 15);
+            const [olon, olat, oh] = proj4("EPSG:4978", 'EPSG:4326', transformOrigin);
+            const oProj = proj4('EPSG:4326', targetCRS, [olon, olat, oh]);
 
             for (const prim of mesh.listPrimitives()) {
                 const posAccessor = prim.getAttribute('POSITION');
@@ -94,19 +92,15 @@ export default class ReprojectB3DM {
                     const pECEF = new Vector3(...posArray.slice(i, i + 3)).applyMatrix4(fullMatrix);
                     const [lon, lat, h] = proj4("EPSG:4978", 'EPSG:4326', pECEF.toArray());
                     const pProj = proj4('EPSG:4326', targetCRS, [lon, lat, h]);
-                    posArray[i] = pProj[0];
-                    posArray[i+1] = pProj[1];
-                    posArray[i+2] = pProj[2];
-                    cx += posArray[i];
-                    cy += posArray[i+1];
-                    cz += posArray[i+2];
-                    n += 1;
-                    minx = Math.min(minx, posArray[i]);
-                    maxx = Math.max(maxx, posArray[i]);
-                    miny = Math.min(miny, posArray[i+1]);
-                    maxy = Math.max(maxy, posArray[i+1]);
-                    minz = Math.min(minz, posArray[i+2]);
-                    maxz = Math.max(maxz, posArray[i+2]);
+                    posArray[i] = pProj[0] - oProj[0];
+                    posArray[i+1] = pProj[1] - oProj[1];
+                    posArray[i+2] = pProj[2] - oProj[2];
+                    minx = Math.min(minx, pProj[0]);
+                    maxx = Math.max(maxx, pProj[0]);
+                    miny = Math.min(miny, pProj[1]);
+                    maxy = Math.max(maxy, pProj[1]);
+                    minz = Math.min(minz, pProj[2]);
+                    maxz = Math.max(maxz, pProj[2]);
                 }
 
                 if (norAccessor) {
@@ -119,33 +113,20 @@ export default class ReprojectB3DM {
                     }
                 }
             }
-            cx /= n;
-            cy /= n;
-            cz /= n;
-            for (const prim of mesh.listPrimitives()) {
-                const posAccessor = prim.getAttribute('POSITION');
-
-                const posArray = posAccessor.getArray();
-                for (let i = 0; i < posArray.length; i += 3) {
-                    posArray[i] -= cx;
-                    posArray[i+1] -= cy;
-                    posArray[i+2] -= cz;
-                }
-            }
 
             if (upAxis === 'Y') {
                 node.setMatrix([
                     1, 0, 0, 0,
                     0, 0,-1, 0,
                     0, 1, 0, 0,
-                    cx, cz, -cy, 1
+                    oProj[0], oProj[2], -oProj[1], 1
                 ]);
             } else {
                 node.setMatrix([
                     1, 0, 0, 0,
                     0, 1, 0, 0,
                     0, 0, 1, 0,
-                    cx, cy, cz, 1
+                    oProj[0], oProj[1], oProj[2], 1
                 ]);
             }
         }
